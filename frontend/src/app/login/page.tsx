@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { verifyOtpAndSignIn } from '@/app/actions/auth'
 import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
+import { notify } from '@/lib/utils'
 
 export default function LoginPage() {
     const [step, setStep] = useState<'REQUEST' | 'VERIFY'>('REQUEST')
@@ -12,15 +13,13 @@ export default function LoginPage() {
     const [otp, setOtp] = useState('')
 
     const [isLoading, setIsLoading] = useState(false)
-    const [error, setError] = useState('Hidden error to prevent layout shift')
 
     const handleSendOTP = async () => {
         if (!identifier.trim()) {
-            setError('Please enter your details')
+            notify.error('Please enter your details')
             return
         }
 
-        setError('Hidden error to prevent layout shift')
         setIsLoading(true)
 
         try {
@@ -28,7 +27,7 @@ export default function LoginPage() {
 
             setStep('VERIFY')
         } catch (err) {
-            setError('Failed to send OTP. Please try again.')
+            notify.error('Failed to send OTP. Please try again.')
         } finally {
             setIsLoading(false)
         }
@@ -36,11 +35,10 @@ export default function LoginPage() {
 
     const handleVerifyOTP = async () => {
         if (otp.length < 4) {
-            setError('Please enter a valid OTP')
+            notify.error('Please enter a valid OTP')
             return
         }
 
-        setError('Hidden error to prevent layout shift')
         setIsLoading(true)
 
         try {
@@ -49,7 +47,7 @@ export default function LoginPage() {
             formData.append('otp', otp)
             await verifyOtpAndSignIn(formData)
         } catch (err) {
-            setError(
+            notify.error(
                 err instanceof Error
                     ? err.message
                     : 'Verification failed. Please try again.',
@@ -83,12 +81,6 @@ export default function LoginPage() {
                             disabled={isLoading}
                         />
 
-                        <p
-                            className={`text-sm mb-4 ${error !== 'Hidden error to prevent layout shift' ? 'text-red-500' : 'text-transparent'}`}
-                        >
-                            {error}
-                        </p>
-
                         <Button
                             className="w-full h-12 text-base"
                             onClick={handleSendOTP}
@@ -101,7 +93,6 @@ export default function LoginPage() {
                             onClick={() => {
                                 setUseEmail(!useEmail)
                                 setIdentifier('')
-                                setError('Hidden error to prevent layout shift')
                             }}
                             className="mt-4 block mx-auto text-sm text-primary hover:underline"
                             disabled={isLoading}
@@ -137,12 +128,6 @@ export default function LoginPage() {
                             disabled={isLoading}
                         />
 
-                        <p
-                            className={`text-sm mb-4 ${error !== 'Hidden error to prevent layout shift' ? 'text-red-500' : 'text-transparent'}`}
-                        >
-                            {error}
-                        </p>
-
                         <Button
                             className="w-full h-12 text-base mb-4"
                             onClick={handleVerifyOTP}
@@ -155,7 +140,6 @@ export default function LoginPage() {
                             onClick={() => {
                                 setStep('REQUEST')
                                 setOtp('')
-                                setError('Hidden error to prevent layout shift')
                             }}
                             className="block mx-auto text-sm text-muted-foreground hover:text-foreground"
                             disabled={isLoading}
