@@ -1,13 +1,16 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import PageShell from '@/components/layout/PageShell'
 import SurfaceCard from '@/components/common/SurfaceCard'
 import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
 import { notify } from '@/lib/utils'
-import { Info } from 'lucide-react'
+import { Eye, File, FileText, Info, MapPin, User, Users } from 'lucide-react'
+
+import useDebounce from '@/hooks/useDebounce'
+import { useSearchParams } from 'next/navigation'
 
 const steps = [
     'Personal Info',
@@ -17,7 +20,7 @@ const steps = [
     'Review',
 ]
 
-const genderOptions = ['Male', 'Female', 'Rather not say']
+const genderOptions = ['MALE', 'FEMALE', 'RATHER NOT SAY']
 
 const indianStateCityMap: Record<string, string[]> = {
     'Andaman and Nicobar Islands': ['Port Blair', 'Diglipur', 'Mayabunder'],
@@ -104,7 +107,28 @@ type FormDataState = {
 
 export default function ApplicationFormPage() {
     const router = useRouter()
-    const [currentStep, setCurrentStep] = useState(0)
+    const searchParams = useSearchParams()
+    const [currentStep, setCurrentStep] = useState(() => {
+        const stepFromQuery = searchParams.get('step')
+        if (!stepFromQuery) {
+            router.replace('?step=1')
+            return 1
+        }
+
+        const parsed = parseInt(stepFromQuery)
+        if (Number.isNaN(parsed) || parsed < 1) {
+            router.replace('?step=1')
+            return 1
+        }
+
+        if (parsed > steps.length) {
+            router.replace(`?step=${steps.length}`)
+            return steps.length
+        }
+
+        return parsed
+    })
+
     const [savedAt, setSavedAt] = useState('')
     const [missingRequired, setMissingRequired] = useState<string[]>([])
     const [formData, setFormData] = useState<FormDataState>({
@@ -140,6 +164,13 @@ export default function ApplicationFormPage() {
         },
     })
 
+    const debouncedCounter = useRef(0)
+    const debouncedFormData = useDebounce(formData, 500)
+    useEffect(() => {
+        if (debouncedFormData && debouncedCounter.current > 0) updateSavedAt()
+        debouncedCounter.current += 1
+    }, [debouncedFormData])
+
     const updateSavedAt = () => {
         setSavedAt(
             new Date().toLocaleTimeString([], {
@@ -147,6 +178,8 @@ export default function ApplicationFormPage() {
                 minute: '2-digit',
             }),
         )
+
+        // patch to backend can be done here to save progress
     }
 
     const updatePersonalField = (
@@ -162,7 +195,7 @@ export default function ApplicationFormPage() {
             },
         }))
         setMissingRequired((prev) => prev.filter((item) => item !== fieldKey))
-        updateSavedAt()
+        // updateSavedAt()
     }
 
     const updateFamilyField = (
@@ -178,7 +211,7 @@ export default function ApplicationFormPage() {
             },
         }))
         setMissingRequired((prev) => prev.filter((item) => item !== fieldKey))
-        updateSavedAt()
+        // updateSavedAt()
     }
 
     const updateAddressField = (
@@ -194,7 +227,7 @@ export default function ApplicationFormPage() {
             },
         }))
         setMissingRequired((prev) => prev.filter((item) => item !== fieldKey))
-        updateSavedAt()
+        // updateSavedAt()
     }
 
     const updateDocumentsField = (
@@ -210,10 +243,10 @@ export default function ApplicationFormPage() {
             },
         }))
         setMissingRequired((prev) => prev.filter((item) => item !== fieldKey))
-        updateSavedAt()
+        // updateSavedAt()
     }
 
-    const sectionTitle = useMemo(() => steps[currentStep], [currentStep])
+    const sectionTitle = useMemo(() => steps[currentStep - 1], [currentStep])
     const addressStateOptions = useMemo(
         () => Object.keys(indianStateCityMap),
         [],
@@ -283,39 +316,135 @@ export default function ApplicationFormPage() {
     }
 
     const validateCurrentStep = () => {
-        const requiredFields = getRequiredFieldsForStep(currentStep)
+        const requiredFields = getRequiredFieldsForStep(currentStep - 1)
         const missing = requiredFields
             .filter(([, value]) => !value || !value.trim())
             .map(([key]) => key)
 
-        setMissingRequired(missing)
+        const invalidLengthFields: string[] = []
+        if (currentStep === 4) {
+            const aadhaarDigits = formData.documents.aadhaarNumber.replace(
+                /\D/g,
+                '',
+            )
+            const panValue = formData.documents.panNumber.trim()
 
-        return missing.length === 0
-    }
+            if (aadhaarDigits.length > 0 && aadhaarDigits.length !== 12) {
+                invalidLengthFields.push('documents.aadhaarNumber')
+            }
 
-    const goNext = () => {
-        if (!validateCurrentStep()) {
+            if (panValue.length > 0 && panValue.length !== 10) {
+                invalidLengthFields.push('documents.panNumber')
+            }
+        }
+
+        const errors = [...new Set([...missing, ...invalidLengthFields])]
+
+        if (missing.length > 0) {
             notify.info(
                 'Please fill all required fields marked with * before moving to the next step.',
             )
+        }
+
+        if (invalidLengthFields.length > 0) {
+            notify.error(
+                'Aadhaar must be 12 digits and PAN must be 10 characters long.',
+            )
+        }
+
+        setMissingRequired(errors)
+
+        return errors.length === 0
+    }
+
+    const validateAllRequiredFields = () => {
+        const allRequiredFields = [0, 1, 2, 3].flatMap((step) =>
+            getRequiredFieldsForStep(step),
+        )
+        const missing = allRequiredFields
+            .filter(([, value]) => !value || !value.trim())
+            .map(([key]) => key)
+
+        const invalidLengthFields: string[] = []
+        const aadhaarDigits = formData.documents.aadhaarNumber.replace(
+            /\D/g,
+            '',
+        )
+        const panValue = formData.documents.panNumber.trim()
+
+        if (aadhaarDigits.length > 0 && aadhaarDigits.length !== 12) {
+            invalidLengthFields.push('documents.aadhaarNumber')
+        }
+
+        if (panValue.length > 0 && panValue.length !== 10) {
+            invalidLengthFields.push('documents.panNumber')
+        }
+
+        const errors = [...new Set([...missing, ...invalidLengthFields])]
+
+        if (missing.length > 0) {
+            notify.info(
+                'Please fill all required fields marked with * before moving to the next step.',
+            )
+        }
+
+        if (invalidLengthFields.length > 0) {
+            notify.error(
+                'Aadhaar must be 12 digits and PAN must be 10 characters long.',
+            )
+        }
+
+        setMissingRequired(errors)
+
+        if (errors.length === 0) return true
+
+        const firstError = errors[0]
+        let targetStep = 1
+        if (firstError.startsWith('family.')) targetStep = 2
+        if (firstError.startsWith('address.')) targetStep = 3
+        if (firstError.startsWith('documents.')) targetStep = 4
+
+        setCurrentStep(targetStep)
+        router.replace(`?step=${targetStep}`)
+
+        return false
+    }
+
+    const goNext = () => {
+        if (currentStep === steps.length) {
+            if (!validateAllRequiredFields()) return
+
+            router.push('/upload')
             return
         }
 
-        if (currentStep < steps.length - 1) {
-            setCurrentStep((prev) => prev + 1)
+        if (!validateCurrentStep()) {
             return
         }
-        router.push('/upload')
+
+        if (currentStep < steps.length) {
+            setCurrentStep((prev) => prev + 1)
+            router.replace('?step=' + (currentStep + 1))
+            return
+        }
     }
 
     const goBack = () => {
-        if (currentStep > 0) {
+        if (currentStep > 1) {
             setCurrentStep((prev) => prev - 1)
+            router.replace('?step=' + (currentStep - 1))
         }
     }
 
+    const goToPastStep = (targetStep: number) => {
+        if (targetStep < 1 || targetStep >= currentStep) return
+
+        setCurrentStep(targetStep)
+        router.replace(`?step=${targetStep}`)
+    }
+
     const renderStepContent = () => {
-        if (currentStep === 0) {
+        if (currentStep === 1) {
             return (
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -450,22 +579,35 @@ export default function ApplicationFormPage() {
                             <label className="block mb-2">
                                 Mobile Number *
                             </label>
-                            <Input
-                                type="tel"
-                                placeholder="+91 98765 43210"
-                                className={`h-12 text-base ${missingRequired.includes('personal.phone') ? 'border-destructive' : ''}`}
-                                value={formData.personal.phone}
-                                onChange={(e) =>
-                                    updatePersonalField('phone', e.target.value)
-                                }
-                            />
+                            <div className="flex items-center gap-0">
+                                <span className="inline-flex h-12 items-center rounded-l-md border border-input bg-background px-3 text-sm font-medium text-muted-foreground">
+                                    +91
+                                </span>
+                                <Input
+                                    type="tel"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    maxLength={10}
+                                    placeholder="9876543210"
+                                    className={`h-12 text-base ${missingRequired.includes('personal.phone') ? 'rounded-l-none border-destructive' : ''}`}
+                                    value={formData.personal.phone}
+                                    onChange={(e) =>
+                                        updatePersonalField(
+                                            'phone',
+                                            e.target.value
+                                                .replace(/\D/g, '')
+                                                .slice(0, 10),
+                                        )
+                                    }
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>
             )
         }
 
-        if (currentStep === 1) {
+        if (currentStep === 2) {
             return (
                 <div className="space-y-6">
                     <div>
@@ -510,7 +652,7 @@ export default function ApplicationFormPage() {
             )
         }
 
-        if (currentStep === 2) {
+        if (currentStep === 3) {
             return (
                 <div className="space-y-6">
                     <div>
@@ -600,7 +742,7 @@ export default function ApplicationFormPage() {
                         <div>
                             <label className="block mb-2">Country</label>
                             <Input
-                                className="h-12 text-base bg-muted"
+                                className="h-12 text-base bg-background/60"
                                 value={formData.address.country}
                                 readOnly
                             />
@@ -610,7 +752,7 @@ export default function ApplicationFormPage() {
             )
         }
 
-        if (currentStep === 3) {
+        if (currentStep === 4) {
             return (
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -619,13 +761,19 @@ export default function ApplicationFormPage() {
                                 Aadhaar Number *
                             </label>
                             <Input
-                                placeholder="XXXX XXXX XXXX"
+                                type="text"
+                                inputMode="numeric"
+                                maxLength={14}
+                                placeholder="1234-5678-9012"
                                 className={`h-12 text-base ${missingRequired.includes('documents.aadhaarNumber') ? 'border-destructive' : ''}`}
                                 value={formData.documents.aadhaarNumber}
                                 onChange={(e) =>
                                     updateDocumentsField(
                                         'aadhaarNumber',
-                                        e.target.value,
+                                        e.target.value
+                                            .replace(/\D/g, '')
+                                            .slice(0, 12)
+                                            .replace(/(\d{4})(?=\d)/g, '$1-'),
                                     )
                                 }
                             />
@@ -633,13 +781,18 @@ export default function ApplicationFormPage() {
                         <div>
                             <label className="block mb-2">PAN Number *</label>
                             <Input
+                                type="text"
+                                maxLength={10}
                                 placeholder="ABCDE1234F"
                                 className={`h-12 text-base ${missingRequired.includes('documents.panNumber') ? 'border-destructive' : ''}`}
                                 value={formData.documents.panNumber}
                                 onChange={(e) =>
                                     updateDocumentsField(
                                         'panNumber',
-                                        e.target.value,
+                                        e.target.value
+                                            .toUpperCase()
+                                            .replace(/[^A-Z0-9]/g, '')
+                                            .slice(0, 10),
                                     )
                                 }
                             />
@@ -728,121 +881,141 @@ export default function ApplicationFormPage() {
             )
         }
 
+        const renderField = (label, value) => (
+            <div className="flex flex-col space-y-1">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    {label}
+                </span>
+                <span className="text-sm font-semibold text-foreground">
+                    {value || 'Not provided'}
+                </span>
+            </div>
+        )
+
+        const renderDocument = (label, value, isFile = false) => (
+            <div className="flex flex-col space-y-2">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    {label}
+                </span>
+                {isFile && value ? (
+                    <div className="flex items-center justify-between p-3 border border-border rounded-lg bg-muted/30 group transition-colors hover:bg-muted/50">
+                        <div className="flex items-center space-x-3 overflow-hidden">
+                            <div className="p-2 bg-primary/10 text-primary rounded-md">
+                                <File className="w-4 h-4" />
+                            </div>
+                            <span
+                                className="text-sm font-medium truncate max-w-[200px]"
+                                title={value}
+                            >
+                                {value}
+                            </span>
+                        </div>
+                        <button
+                            type="button"
+                            className="flex items-center space-x-1 text-xs font-semibold text-primary opacity-80 hover:opacity-100 transition-opacity"
+                        >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View</span>
+                        </button>
+                    </div>
+                ) : (
+                    <span className="text-sm font-semibold text-foreground">
+                        {value || 'Not provided'}
+                    </span>
+                )}
+            </div>
+        )
+
         return (
-            <div className="space-y-8">
-                <div>
-                    <h3 className="text-base font-semibold mb-4">
-                        Personal Info
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                        <p>
-                            <span className="text-muted-foreground">
-                                First Name:
-                            </span>
-                            {formData.personal.firstName || 'Not provided'}
-                        </p>
-                        <p>
-                            <span className="text-muted-foreground">
-                                Last Name:
-                            </span>
-                            {formData.personal.lastName || 'Not provided'}
-                        </p>
-                        <p>
-                            <span className="text-muted-foreground">DOB:</span>
-                            {formData.personal.dob || 'Not provided'}
-                        </p>
-                        <p>
-                            <span className="text-muted-foreground">
-                                Gender:
-                            </span>
-                            {formData.personal.gender || 'Not provided'}
-                        </p>
+            <div className="space-y-6 w-full max-w-3xl mx-auto">
+                <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+                    <div className="bg-primary/5 px-6 py-4 border-b border-border flex items-center space-x-2">
+                        <User className="w-5 h-5 text-primary" />
+                        <h3 className="text-base font-semibold text-primary">
+                            Personal Info
+                        </h3>
+                    </div>
+                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8">
+                        {renderField('First Name', formData.personal.firstName)}
+                        {renderField('Last Name', formData.personal.lastName)}
+                        {renderField('Date of Birth', formData.personal.dob)}
+                        {renderField('Gender', formData.personal.gender)}
                     </div>
                 </div>
 
-                <div>
-                    <h3 className="text-base font-semibold mb-4">
-                        Family Details
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                        <p>
-                            <span className="text-muted-foreground">
-                                Mother:
-                            </span>
-                            {formData.family.motherName || 'Not provided'}
-                        </p>
-                        <p>
-                            <span className="text-muted-foreground">
-                                Father:
-                            </span>
-                            {formData.family.fatherName || 'Not provided'}
-                        </p>
-                        <p>
-                            <span className="text-muted-foreground">
-                                Spouse:
-                            </span>
-                            {formData.family.spouseName || 'Not provided'}
-                        </p>
+                <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+                    <div className="bg-primary/5 px-6 py-4 border-b border-border flex items-center space-x-2">
+                        <Users className="w-5 h-5 text-primary" />
+                        <h3 className="text-base font-semibold text-primary">
+                            Family Details
+                        </h3>
+                    </div>
+                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8">
+                        {renderField(
+                            "Mother's Name",
+                            formData.family.motherName,
+                        )}
+                        {renderField(
+                            "Father's Name",
+                            formData.family.fatherName,
+                        )}
+                        {renderField(
+                            "Spouse's Name",
+                            formData.family.spouseName,
+                        )}
                     </div>
                 </div>
 
-                <div>
-                    <h3 className="text-base font-semibold mb-4">Address</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                        <p>
-                            <span className="text-muted-foreground">
-                                Line 1:
-                            </span>
-                            {formData.address.addressLine1 || 'Not provided'}
-                        </p>
-                        <p>
-                            <span className="text-muted-foreground">
-                                Line 2:
-                            </span>
-                            {formData.address.addressLine2 || 'Not provided'}
-                        </p>
-                        <p>
-                            <span className="text-muted-foreground">City:</span>
-                            {formData.address.city || 'Not provided'}
-                        </p>
-                        <p>
-                            <span className="text-muted-foreground">
-                                State:
-                            </span>
-                            {formData.address.state || 'Not provided'}
-                        </p>
+                <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+                    <div className="bg-primary/5 px-6 py-4 border-b border-border flex items-center space-x-2">
+                        <MapPin className="w-5 h-5 text-primary" />
+                        <h3 className="text-base font-semibold text-primary">
+                            Address
+                        </h3>
+                    </div>
+                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8">
+                        <div className="md:col-span-2">
+                            {renderField(
+                                'Address Line 1',
+                                formData.address.addressLine1,
+                            )}
+                        </div>
+                        <div className="md:col-span-2">
+                            {renderField(
+                                'Address Line 2',
+                                formData.address.addressLine2,
+                            )}
+                        </div>
+                        {renderField('City', formData.address.city)}
+                        {renderField('State', formData.address.state)}
                     </div>
                 </div>
 
-                <div>
-                    <h3 className="text-base font-semibold mb-4">Documents</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                        <p>
-                            <span className="text-muted-foreground">
-                                Aadhaar:
-                            </span>
-                            {formData.documents.aadhaarNumber || 'Not provided'}
-                        </p>
-                        <p>
-                            <span className="text-muted-foreground">PAN:</span>
-                            {formData.documents.panNumber || 'Not provided'}
-                        </p>
-                        <p>
-                            <span className="text-muted-foreground">
-                                Address Proof:
-                            </span>
-                            {formData.documents.addressProofType ||
-                                'Not provided'}
-                        </p>
-                        <p>
-                            <span className="text-muted-foreground">
-                                Passport Photo:
-                            </span>
-                            <span className="break-all">
-                                {formData.documents.passportPhotoName ||
-                                    'Not uploaded'}
-                            </span>
-                        </p>
+                <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+                    <div className="bg-primary/5 px-6 py-4 border-b border-border flex items-center space-x-2">
+                        <FileText className="w-5 h-5 text-primary" />
+                        <h3 className="text-base font-semibold text-primary">
+                            Documents
+                        </h3>
+                    </div>
+                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8">
+                        {renderDocument(
+                            'Aadhaar Number',
+                            formData.documents.aadhaarNumber,
+                        )}
+                        {renderDocument(
+                            'PAN Number',
+                            formData.documents.panNumber,
+                        )}
+                        {renderDocument(
+                            'Address Proof',
+                            formData.documents.addressProofType,
+                        )}
+                        {renderDocument(
+                            'Passport Photo',
+                            formData.documents.passportPhotoName,
+                            true,
+                        )}
                     </div>
                 </div>
             </div>
@@ -853,7 +1026,7 @@ export default function ApplicationFormPage() {
         <PageShell
             navbarState="form"
             formStep={{
-                current: currentStep + 1,
+                current: currentStep,
                 total: steps.length,
                 label: sectionTitle,
             }}
@@ -867,20 +1040,27 @@ export default function ApplicationFormPage() {
                             key={i}
                             className="flex flex-col items-center flex-1"
                         >
-                            <div
+                            <button
+                                type="button"
+                                onClick={() => goToPastStep(i + 1)}
+                                disabled={i + 1 >= currentStep}
                                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold mb-2 ${
-                                    i < currentStep
+                                    i < currentStep - 1
                                         ? 'bg-success text-success-foreground'
-                                        : i === currentStep
+                                        : i === currentStep - 1
                                           ? 'bg-primary text-primary-foreground'
                                           : 'bg-secondary text-muted-foreground'
+                                } ${
+                                    i + 1 < currentStep
+                                        ? 'cursor-pointer'
+                                        : 'cursor-default'
                                 }`}
                             >
                                 {i + 1}
-                            </div>
+                            </button>
                             <span
                                 className={`text-xs font-medium text-center ${
-                                    i === currentStep
+                                    i === currentStep - 1
                                         ? 'text-primary'
                                         : 'text-muted-foreground'
                                 }`}
@@ -898,12 +1078,12 @@ export default function ApplicationFormPage() {
                         variant="outline"
                         size="lg"
                         onClick={goBack}
-                        disabled={currentStep === 0}
+                        disabled={currentStep === 1}
                     >
                         Back
                     </Button>
                     <Button size="lg" onClick={goNext}>
-                        {currentStep === steps.length - 1
+                        {currentStep === steps.length
                             ? 'Save & Continue'
                             : 'Next Step'}
                     </Button>

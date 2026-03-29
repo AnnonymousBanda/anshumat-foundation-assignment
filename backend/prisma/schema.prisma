@@ -65,6 +65,7 @@ model applications {
   created_at         DateTime               @default(now())
   last_saved_at      DateTime?
   submitted_at       DateTime?
+  current_step Int      @default(0)
 
   user                  users                   @relation(fields: [user_id], references: [id])
   application_detail    application_details?
