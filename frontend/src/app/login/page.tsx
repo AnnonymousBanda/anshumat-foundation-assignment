@@ -71,7 +71,7 @@ export default function LoginPage() {
 
     const handleEmailLogin = async () => {
         if (!email.trim() || !password.trim()) {
-            notify.error('Please enter email and password')
+            notify.error('Please fill all required fields')
             return
         }
 
@@ -86,11 +86,15 @@ export default function LoginPage() {
                 },
             )
 
+            if (res.status !== 200)
+                throw new Error(
+                    res.data.detail || 'Login failed. Please try again.',
+                )
+
             const formData = new FormData()
             formData.append('token', res.data.token)
             await signIn(formData)
-
-            notify.success(res.data.message)
+            notify.success('Login successful. Signing you up...')
             router.push('/dashboard')
         } catch (error) {
             const backendErrorMessage =

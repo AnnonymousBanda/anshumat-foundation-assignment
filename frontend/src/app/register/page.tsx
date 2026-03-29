@@ -187,10 +187,30 @@ export default function RegisterPage() {
         setIsLoading(true)
 
         try {
-            await new Promise((resolve) => setTimeout(resolve, 350))
-            notify.success('Registration form validated. Signing you up...')
-        } catch {
-            notify.error('Registration failed. Please try again.')
+            const res = await axios.post(
+                process.env.NEXT_PUBLIC_API_URL + '/auth/register',
+                {
+                    email,
+                    password,
+                },
+            )
+
+            if (res.status !== 200)
+                throw new Error(
+                    res.data.detail || 'Registration failed. Please try again.',
+                )
+
+            const formData = new FormData()
+            formData.append('token', res.data.token)
+            await signIn(formData)
+            notify.success('Registration successful. Signing you up...')
+            router.push('/dashboard')
+        } catch (error) {
+            const backendErrorMessage =
+                (error as { response?: { data?: { detail?: string } } })
+                    .response?.data?.detail ||
+                'Registration failed. Please try again.'
+            notify.error(backendErrorMessage)
         } finally {
             setIsLoading(false)
         }
