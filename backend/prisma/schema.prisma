@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-py"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum application_status {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+}
+
+enum passport_type {
+  FRESH
+  REISSUE
+}
+
+enum address_role {
+  PRESENT
+  PERMANENT
+  EMERGENCY
+}
+
+enum document_role {
+  PROOF_OF_DOB
+  PRESENT_ADDRESS_PROOF
+  NON_ECR_PROOF
+}
+
+enum appointment_status {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum gender {
+  MALE
+  FEMALE
+  RATHER_NOT_SAY @map("RATHER NOT SAY")
+}
+
+model users {
+  id            String      @id @default(uuid()) @db.VarChar(36)
+  phone_number  String      @unique @db.VarChar(20)
+  email         String      @unique @db.VarChar(255)
+  password_hash String      @db.VarChar(255)
+  created_at    DateTime    @default(now())
+
+  applications  applications[]
+  addresses     addresses[]
+  documents     documents[]
+}
+
+model applications {
+  id                 String                 @id @default(uuid()) @db.VarChar(36)
+  user_id            String                 @db.VarChar(36)
+  arn                String                 @unique @db.VarChar(64)
+  status             application_status     @default(DRAFT)
+  passport_type      passport_type
+  submitted_form_url String?                @db.VarChar(512)
+  created_at         DateTime               @default(now())
+  last_saved_at      DateTime?
+  submitted_at       DateTime?
+
+  user                  users                   @relation(fields: [user_id], references: [id])
+  application_detail    application_details?
+  application_addresses application_addresses[]
+  application_documents application_documents[]
+  appointments          appointments[]
+}
+
+model application_details {
+  application_id  String   @id @db.VarChar(36)
+  fName           String   @db.VarChar(255)
+  lName           String   @db.VarChar(255)
+  gender          gender
+  dob             DateTime @db.Date
+  place_of_birth  String   @db.VarChar(255)
+  state_of_birth  String   @db.VarChar(255)
+  father_name     String   @db.VarChar(255)
+  mother_name     String   @db.VarChar(255)
+  spouse_name     String?  @db.VarChar(255)
+  email           String   @db.VarChar(255)
+  phone_number    String   @db.VarChar(20)
+
+  application applications @relation(fields: [application_id], references: [id], onDelete: Cascade)
+}
+
+model addresses {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  user_id        String   @db.VarChar(36)
+  address_line_1 String   @db.VarChar(255)
+  address_line_2 String?  @db.VarChar(255)
+  city           String   @db.VarChar(255)
+  state          String   @db.VarChar(255)
+  pincode        String   @db.VarChar(20)
+  country        String   @db.VarChar(100)
+
+  user                  users                    @relation(fields: [user_id], references: [id])
+  application_addresses application_addresses[]
+}
+
+model documents {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  user_id     String   @db.VarChar(36)
+  file_url    String   @db.VarChar(1024)
+  uploaded_at DateTime @default(now())
+
+  user                  users                    @relation(fields: [user_id], references: [id])
+  application_documents application_documents[]
+}
+
+model application_addresses {
+  application_id String       @db.VarChar(36)
+  address_id     String       @db.VarChar(36)
+  role           address_role
+
+  application applications @relation(fields: [application_id], references: [id], onDelete: Cascade)
+  address     addresses    @relation(fields: [address_id], references: [id])
+
+  @@id([application_id, role])
+}
+
+model application_documents {
+  application_id String        @db.VarChar(36)
+  document_id    String        @db.VarChar(36)
+  role           document_role
+
+  application applications @relation(fields: [application_id], references: [id], onDelete: Cascade)
+  document    documents    @relation(fields: [document_id], references: [id])
+
+  @@id([application_id, role])
+}
+
+model appointments {
+  id               String             @id @default(uuid()) @db.VarChar(36)
+  application_id   String             @db.VarChar(36)
+  psk_location     String             @db.VarChar(255)
+  appointment_date DateTime           @db.Date
+  time_slot        String             @db.VarChar(100)
+  status           appointment_status @default(SCHEDULED)
+
+  application applications @relation(fields: [application_id], references: [id], onDelete: Cascade)
+}
