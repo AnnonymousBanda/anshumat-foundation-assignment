@@ -1,8 +1,32 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-export function middleware(request: NextRequest) {
-    const token = request.cookies.get('auth-token')
+export async function middleware(request: NextRequest) {
+    let token = request.cookies.get('auth-token')?.value
+
+    if (token) {
+        token = token.replace(/"/g, '')
+    }
+
+    let isValid = false
+
+    if (token) {
+        try {
+            const res = await fetch(
+                `${process.env.NEXT_PUBLIC_API_URL}/auth/verify`,
+                {
+                    method: 'GET',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                },
+            )
+
+            isValid = res.status === 200
+        } catch {
+            isValid = false
+        }
+    }
 
     const protectedPaths = [
         '/dashboard',
@@ -13,16 +37,19 @@ export function middleware(request: NextRequest) {
         '/onboarding',
         '/upload',
     ]
+
+    const authPaths = ['/login', '/register']
+
     const isTryingToAccessProtected = protectedPaths.includes(
         request.nextUrl.pathname,
     )
-    const isTryingToAccessLogin = request.nextUrl.pathname === '/login'
+    const isTryingToAccessLogin = authPaths.includes(request.nextUrl.pathname)
 
-    if (!token && isTryingToAccessProtected) {
+    if (!isValid && isTryingToAccessProtected) {
         return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    if (token && isTryingToAccessLogin) {
+    if (isValid && isTryingToAccessLogin) {
         return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 

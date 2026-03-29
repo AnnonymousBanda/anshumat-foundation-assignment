@@ -2,9 +2,12 @@
 
 import Link from 'next/link'
 import { useRef, useState } from 'react'
+import { signIn } from '@/app/actions/auth'
 import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
 import { notify } from '@/lib/utils'
+import axios from 'axios'
+import { useRouter } from 'next/navigation'
 
 type RegisterMode = 'PHONE' | 'EMAIL'
 type RegisterStep = 'REQUEST' | 'VERIFY'
@@ -23,6 +26,7 @@ export default function RegisterPage() {
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
     const otp = otpDigits.join('')
+    const router = useRouter()
 
     const handleModeSwitch = (nextMode: RegisterMode) => {
         if (isLoading || step === 'VERIFY') {
@@ -45,10 +49,20 @@ export default function RegisterPage() {
         setIsLoading(true)
 
         try {
-            await new Promise((resolve) => setTimeout(resolve, 350))
-            notify.success('OTP sent successfully')
+            const res = await axios.post(
+                process.env.NEXT_PUBLIC_API_URL + '/auth/login/otp/send',
+                { phone_number: phoneNumber },
+            )
+            console.log(res)
+            if (res.status === 200) notify.success(res.data.message)
+            else throw new Error(res.data.detail)
+
+            const { hash, expires_at } = res.data
+            sessionStorage.setItem('otp_hash', hash)
+            sessionStorage.setItem('otp_expires_at', expires_at.toString())
+            sessionStorage.setItem('otp_phone', phoneNumber)
             setStep('VERIFY')
-        } catch {
+        } catch (error) {
             notify.error('Failed to send OTP. Please try again.')
         } finally {
             setIsLoading(false)
@@ -64,10 +78,36 @@ export default function RegisterPage() {
         setIsLoading(true)
 
         try {
-            await new Promise((resolve) => setTimeout(resolve, 350))
-            notify.success('Number verified. Signing you up...')
-        } catch {
-            notify.error('OTP verification failed. Please try again.')
+            const expiresAtString = sessionStorage.getItem('otp_expires_at')
+
+            const res = await axios.post(
+                process.env.NEXT_PUBLIC_API_URL + '/auth/login/otp/verify',
+                {
+                    phone_number: sessionStorage.getItem('otp_phone'),
+                    hash_value: sessionStorage.getItem('otp_hash'),
+                    expires_at: expiresAtString
+                        ? parseInt(expiresAtString, 10)
+                        : 0,
+                    otp: otp,
+                },
+            )
+
+            const formData = new FormData()
+            formData.append('token', res.data.token)
+            await signIn(formData)
+
+            sessionStorage.removeItem('otp_hash')
+            sessionStorage.removeItem('otp_expires_at')
+            sessionStorage.removeItem('otp_phone')
+
+            notify.success(res.data.message)
+            router.push('/dashboard')
+        } catch (error) {
+            console.log(error)
+            const backendErrorMessage =
+                error.response?.data?.detail ||
+                'OTP verification failed. Please try again.'
+            notify.error(backendErrorMessage)
         } finally {
             setIsLoading(false)
         }
@@ -329,12 +369,12 @@ export default function RegisterPage() {
                 )}
 
                 <p className="text-sm text-muted-foreground text-center mt-6">
-                    Already registered?{' '}
+                    Already registered?
                     <Link
                         href="/login"
                         className="text-primary hover:underline"
                     >
-                        Login now
+                        Go to Login Page
                     </Link>
                 </p>
             </div>

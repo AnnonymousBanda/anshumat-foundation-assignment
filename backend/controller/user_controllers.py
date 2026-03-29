@@ -5,6 +5,8 @@ from db.prisma_client import db
 from utils.auth_util import decode_jwt, generate_otp_hash, get_password_hash, sign_jwt, verify_password
 import hmac
 import time
+import os
+import traceback
 import random
 
 class CreateUserPayload(BaseModel):
@@ -56,7 +58,12 @@ async def create_user(payload: CreateUserPayload):
         raise
     except Exception as e:
         print(f"Error creating user: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        env = os.getenv("ENVIRONMENT", "development")
+        if env == "development":
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=str(e))
+        else:
+            raise HTTPException(status_code=500, detail="Internal server error")
 
 security = HTTPBearer()
 
@@ -131,22 +138,28 @@ async def send_otp(payload: SendOTPPayload):
         otp_hash = generate_otp_hash(payload.phone_number, otp, expires_at)
         
         # In a real implementation, you would send the OTP via SMS here.
-        print(f"MOCK SMS -> To: {payload.phone_number} | OTP: {otp}")
+        phone_number = "+91" + payload.phone_number[-10:]
+        print(f"MOCK SMS -> To: {phone_number} | OTP: {otp}")
         
         return {
             "message": "OTP sent successfully",
             "hash": otp_hash,
             "expires_at": expires_at
         }
-    except Exception:
-        raise HTTPException(status_code=500, detail="Internal server error")
+    except Exception as e:
+        env = os.getenv("ENVIRONMENT", "development")
+        if env == "development":
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=str(e))
+        else:
+            raise HTTPException(status_code=500, detail="Internal server error")
 
 
 async def verify_otp_login(payload: VerifyOTPPayload):
     try:
         if int(time.time()) > payload.expires_at:
             raise HTTPException(status_code=401, detail="OTP has expired")
-            
+        
         expected_hash = generate_otp_hash(payload.phone_number, payload.otp, payload.expires_at)
         
         if not hmac.compare_digest(expected_hash, payload.hash_value):
@@ -157,7 +170,9 @@ async def verify_otp_login(payload: VerifyOTPPayload):
         )
         
         if not user:
-            raise HTTPException(status_code=404, detail="User not found. Please register first.")
+            user = await db.users.create(
+                data={"phone_number": payload.phone_number}
+            )
             
         return {
             "message": "Login successful",
@@ -170,6 +185,11 @@ async def verify_otp_login(payload: VerifyOTPPayload):
         }
     except HTTPException:
         raise
-    except Exception:
-        raise HTTPException(status_code=500, detail="Internal server error")
+    except Exception as e:
+        env = os.getenv("ENVIRONMENT", "development")
+        if env == "development":
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=str(e))
+        else:
+            raise HTTPException(status_code=500, detail="Internal server error")
     
