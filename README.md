@@ -6,6 +6,8 @@ Passport Seva Portal is a full-stack web application for passport application on
 
 https://passport.atttrack.online/
 
+Frontend and backend server are deployed on AWS EC2.
+
 ## Project Structure
 
 ```text
@@ -20,25 +22,30 @@ passport-seva-portal/
 
 ### Frontend
 
-- Next.js 15 (App Router)
-- React 18 + TypeScript
-- Tailwind CSS
-- Axios (API calls)
-- React Query
-- React Toastify
+![Next.js](https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)
+![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-0F172A?style=for-the-badge&logo=tailwindcss&logoColor=38BDF8)
+![Axios](https://img.shields.io/badge/Axios-5A29E4?style=for-the-badge&logo=axios&logoColor=white)
+![React Query](https://img.shields.io/badge/React_Query-FF4154?style=for-the-badge&logo=reactquery&logoColor=white)
+![React Toastify](https://img.shields.io/badge/React_Toastify-FF6C37?style=for-the-badge&logo=react&logoColor=white)
 
 ### Backend
 
-- FastAPI
-- Uvicorn
-- Prisma Client Python (`prisma-client-py`)
-- MySQL
-- JWT-based authentication
+![FastAPI](https://img.shields.io/badge/FastAPI-0B1F2A?style=for-the-badge&logo=fastapi&logoColor=00C7B7)
+![Uvicorn](https://img.shields.io/badge/Uvicorn-4051B5?style=for-the-badge&logo=uvicorn&logoColor=white)
+![Prisma](https://img.shields.io/badge/Prisma_Client_Python-2D3748?style=for-the-badge&logo=prisma&logoColor=white)
+![MySQL](https://img.shields.io/badge/MySQL-0A192F?style=for-the-badge&logo=mysql&logoColor=4FC3F7)
+![JWT](https://img.shields.io/badge/JWT-1A1A1A?style=for-the-badge&logo=jsonwebtokens&logoColor=white)
+
+### Deployment and Services
+
+![AWS EC2](https://img.shields.io/badge/AWS_EC2-232F3E?style=for-the-badge&logo=amazonaws&logoColor=FF9900)
 
 ### Tooling
 
-- ESLint
-- Prettier
+![ESLint](https://img.shields.io/badge/ESLint-111827?style=for-the-badge&logo=eslint&logoColor=8B5CF6)
+![Prettier](https://img.shields.io/badge/Prettier-1E293B?style=for-the-badge&logo=prettier&logoColor=F7BA3E)
 
 ## Initialization and Setup
 
