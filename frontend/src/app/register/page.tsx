@@ -58,8 +58,7 @@ export default function RegisterPage() {
                 notify.success(
                     'A one-time verification code has been sent to your mobile number.',
                 )
-            }
-            else throw new Error(res.data.detail)
+            } else throw new Error(res.data.detail)
 
             const { hash, expires_at } = res.data
             sessionStorage.setItem('otp_hash', hash)
