@@ -164,7 +164,7 @@ export default function ApplicationFormPage() {
 
     const debouncedCounter = useRef(0)
     const debouncedFormData = useDebounce(formData, 500)
-    const highestSavedStepRef = useRef(currentStep)
+    const hasHydratedForCurrentApplication = useRef(false)
 
     const hydrateFormData = (payload: unknown) => {
         const raw = (payload ?? {}) as {
@@ -211,28 +211,27 @@ export default function ApplicationFormPage() {
                 return
             }
 
-            setApplicationId(applicationIdFromQuery)
+            const shouldFetchDetails =
+                !hasHydratedForCurrentApplication.current ||
+                applicationIdFromQuery !== applicationId
 
-            const detailsRes = await axios.get(
-                `/api/form/details/${applicationIdFromQuery}`,
-            )
+            if (shouldFetchDetails) {
+                setApplicationId(applicationIdFromQuery)
 
-            if (detailsRes.status !== 200) {
-                notify.error(
-                    'Invalid application ID. Redirecting to onboarding.',
+                const detailsRes = await axios.get(
+                    `/api/form/details/${applicationIdFromQuery}`,
                 )
-                router.push('/onboarding')
-                return
-            }
 
-            hydrateFormData(detailsRes.data)
+                if (detailsRes.status !== 200) {
+                    notify.error(
+                        'Invalid application ID. Redirecting to onboarding.',
+                    )
+                    router.push('/onboarding')
+                    return
+                }
 
-            const persistedStep = Number(detailsRes.data?.current_step)
-            if (!Number.isNaN(persistedStep)) {
-                highestSavedStepRef.current = Math.max(
-                    highestSavedStepRef.current,
-                    persistedStep,
-                )
+                hydrateFormData(detailsRes.data)
+                hasHydratedForCurrentApplication.current = true
             }
 
             const stepFromQuery = searchParams.get('step')
@@ -250,54 +249,58 @@ export default function ApplicationFormPage() {
         }
 
         validateQueryParams()
-    }, [searchParams, router])
+    }, [searchParams, router, applicationId])
 
-    const updateSavedAt = useCallback(async () => {
-        if (!applicationId) return
+    const updateSavedAt = useCallback(
+        async (dataToSave: FormDataState) => {
+            if (!applicationId) return
 
-        try {
-            const rawDob = debouncedFormData.personal?.dob ?? ''
-            const dobForSave =
-                rawDob && !rawDob.includes('T')
-                    ? `${rawDob}T00:00:00.000Z`
-                    : rawDob
-            const stepToSave = Math.max(highestSavedStepRef.current, currentStep)
+            try {
+                const rawDob = dataToSave.personal?.dob ?? ''
+                const dobForSave =
+                    rawDob && !rawDob.includes('T')
+                        ? `${rawDob}T00:00:00.000Z`
+                        : rawDob
 
-            await axios.patch(`/api/form/save/${applicationId}`, {
-                current_step: stepToSave,
-                form_data: {
-                    ...debouncedFormData,
-                    personal: {
-                        ...debouncedFormData.personal,
-                        dob: dobForSave,
+                await axios.patch(`/api/form/save/${applicationId}`, {
+                    current_step: currentStep,
+                    form_data: {
+                        ...dataToSave,
+                        personal: {
+                            ...dataToSave.personal,
+                            dob: dobForSave,
+                        },
                     },
-                },
-            })
+                })
 
-            highestSavedStepRef.current = stepToSave
+                setSavedAt(
+                    new Date().toLocaleTimeString([], {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                    }),
+                )
+                return true
+            } catch (error) {
+                const typedError = error as {
+                    response?: { data?: { detail?: string } }
+                    message?: string
+                }
+                const errorMsg =
+                    typedError.response?.data?.detail ||
+                    typedError.message ||
+                    'Failed to save form progress. Please try again.'
 
-            setSavedAt(
-                new Date().toLocaleTimeString([], {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                }),
-            )
-        } catch (error) {
-            const typedError = error as {
-                response?: { data?: { detail?: string } }
-                message?: string
+                notify.error(errorMsg)
+                return false
             }
-            const errorMsg =
-                typedError.response?.data?.detail ||
-                typedError.message ||
-                'Failed to save form progress. Please try again.'
-
-            notify.error(errorMsg)
-        }
-    }, [applicationId, currentStep, debouncedFormData])
+        },
+        [applicationId, currentStep],
+    )
 
     useEffect(() => {
-        if (debouncedFormData && debouncedCounter.current > 0) updateSavedAt()
+        if (debouncedFormData && debouncedCounter.current > 0) {
+            void updateSavedAt(debouncedFormData)
+        }
         debouncedCounter.current += 1
     }, [debouncedFormData, updateSavedAt])
 
@@ -529,9 +532,12 @@ export default function ApplicationFormPage() {
         return false
     }
 
-    const goNext = () => {
+    const goNext = async () => {
         if (currentStep === steps.length) {
             if (!validateAllRequiredFields()) return
+
+            const saved = await updateSavedAt(formData)
+            if (!saved) return
 
             router.push('/upload')
             return
@@ -540,6 +546,9 @@ export default function ApplicationFormPage() {
         if (!validateCurrentStep()) {
             return
         }
+
+        const saved = await updateSavedAt(formData)
+        if (!saved) return
 
         if (currentStep < steps.length) {
             setCurrentStep((prev) => prev + 1)
