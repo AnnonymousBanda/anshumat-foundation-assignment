@@ -8,6 +8,10 @@ https://passport.atttrack.online/
 
 Frontend and backend server are deployed on AWS EC2.
 
+## Repository
+
+https://github.com/AnnonymousBanda/anshumat-foundation-assignment
+
 ## Project Structure
 
 ```text
@@ -52,7 +56,7 @@ passport-seva-portal/
 ## 1) Clone the repository
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/AnnonymousBanda/anshumat-foundation-assignment.git
 cd passport-seva-portal
 ```
 
