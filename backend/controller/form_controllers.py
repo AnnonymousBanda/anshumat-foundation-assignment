@@ -253,36 +253,45 @@ async def save_progress(
         raise HTTPException(status_code=500, detail="An error occurred while saving progress")
 
 
-async def check_status(application_id: str, current_user: dict = Depends(verify_user)):
-    if not application_id:
-        raise HTTPException(status_code=400, detail="Application ID is required")
-        
+async def get_all_forms(current_user: dict = Depends(verify_user)):
     try:
         user_id = current_user["user"]["id"]
-        
-        app_record = await db.applications.find_first(
+
+        app_records = await db.applications.find_many(
             where={
-                "id": application_id,
                 "user_id": user_id
+            },
+            include={
+                "application_detail": True
+            },
+            order={
+                "created_at": "desc"
             }
         )
-        
-        if not app_record:
-            raise HTTPException(status_code=404, detail="Application not found or unauthorized")
+
+        applications_list = []
+        for app in app_records:
+            details = app.application_detail
+            first_name = details.fName if details and details.fName else ""
+            last_name = details.lName if details and details.lName else ""
+            
+            applications_list.append({
+                "id": app.id,
+                "arn": app.arn,
+                "status": app.status,
+                "current_step": app.current_step,
+                "created_at": app.created_at,
+                "applicant_name": f"{first_name} {last_name}".strip()
+            })
 
         return {
-            "message": "Application status retrieved successfully",
-            "application_id": app_record.id,
-            "arn": app_record.arn,
-            "status": app_record.status,
-            "current_step": app_record.current_step
+            "message": "Applications retrieved successfully",
+            "applications": applications_list
         }
 
-    except HTTPException:
-        raise
-    except Exception as e:
+    except Exception:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Failed to retrieve application status")
+        raise HTTPException(status_code=500, detail="Failed to retrieve applications")
 
 
 async def get_application_details(
