@@ -86,13 +86,123 @@ async def save_progress(
         if existing_app.status != "DRAFT":
             raise HTTPException(status_code=400, detail="Cannot edit a submitted application")
 
-        updated_app = await db.applications.update(
-            where={"id": application_id},
-            data={
-                "current_step": payload.current_step,
-                "last_saved_at": datetime.now(timezone.utc),
-            }
-        )
+        fd = payload.form_data
+        personal = fd.get("personal")
+        family = fd.get("family")
+        addr = fd.get("address")
+
+        async with db.tx() as transaction:
+            updated_app = await transaction.applications.update(
+                where={"id": application_id},
+                data={
+                    "current_step": payload.current_step,
+                    "last_saved_at": datetime.now(timezone.utc),
+                }
+            )
+
+            if personal is not None or family is not None:
+                p = personal or {}
+                f = family or {}
+
+                dob_val = None
+                if p.get("dob"):
+                    try:
+                        dob_val = datetime.fromisoformat(p.get("dob").replace("Z", "+00:00"))
+                    except ValueError:
+                        pass
+
+                gender_val = None
+                if p.get("gender"):
+                    g = p.get("gender").upper()
+                    if g in ["MALE", "FEMALE"]:
+                        gender_val = g
+                    elif g == "RATHER NOT SAY":
+                        gender_val = "RATHER_NOT_SAY"
+
+                existing_details = await transaction.application_details.find_unique(
+                    where={"application_id": application_id}
+                )
+
+                update_data = {}
+                if p:
+                    if "firstName" in p: update_data["fName"] = p["firstName"]
+                    if "lastName" in p: update_data["lName"] = p["lastName"]
+                    if "gender" in p: update_data["gender"] = gender_val
+                    if "dob" in p: update_data["dob"] = dob_val
+                    if "placeOfBirth" in p: update_data["place_of_birth"] = p["placeOfBirth"]
+                    if "birthState" in p: update_data["state_of_birth"] = p["birthState"]
+                    if "email" in p: update_data["email"] = p["email"]
+                    if "phone" in p: update_data["phone_number"] = p["phone"]
+                if f:
+                    if "fatherName" in f: update_data["father_name"] = f["fatherName"]
+                    if "motherName" in f: update_data["mother_name"] = f["motherName"]
+                    if "spouseName" in f: update_data["spouse_name"] = f["spouseName"]
+
+                if existing_details:
+                    if update_data:
+                        await transaction.application_details.update(
+                            where={"application_id": application_id},
+                            data=update_data
+                        )
+                else:
+                    await transaction.application_details.create(
+                        data={
+                            "application_id": application_id,
+                            "fName": p.get("firstName"),
+                            "lName": p.get("lastName"),
+                            "gender": gender_val,
+                            "dob": dob_val,
+                            "place_of_birth": p.get("placeOfBirth"),
+                            "state_of_birth": p.get("birthState"),
+                            "email": p.get("email"),
+                            "phone_number": p.get("phone"),
+                            "father_name": f.get("fatherName"),
+                            "mother_name": f.get("motherName"),
+                            "spouse_name": f.get("spouseName")
+                        }
+                    )
+
+            if addr is not None:
+                app_addr = await transaction.application_addresses.find_first(
+                    where={
+                        "application_id": application_id,
+                        "role": "PRESENT"
+                    }
+                )
+
+                if app_addr:
+                    update_addr = {}
+                    if "addressLine1" in addr: update_addr["address_line_1"] = addr["addressLine1"]
+                    if "addressLine2" in addr: update_addr["address_line_2"] = addr["addressLine2"]
+                    if "city" in addr: update_addr["city"] = addr["city"]
+                    if "state" in addr: update_addr["state"] = addr["state"]
+                    if "pincode" in addr: update_addr["pincode"] = addr["pincode"]
+                    if "country" in addr: update_addr["country"] = addr["country"]
+
+                    if update_addr:
+                        await transaction.addresses.update(
+                            where={"id": app_addr.address_id},
+                            data=update_addr
+                        )
+                else:
+                    new_addr = await transaction.addresses.create(
+                        data={
+                            "user_id": user_id,
+                            "address_line_1": addr.get("addressLine1", ""),
+                            "address_line_2": addr.get("addressLine2", ""),
+                            "city": addr.get("city", ""),
+                            "state": addr.get("state", ""),
+                            "pincode": addr.get("pincode", ""),
+                            "country": addr.get("country", "")
+                        }
+                    )
+                    await transaction.application_addresses.create(
+                        data={
+                            "application_id": application_id,
+                            "address_id": new_addr.id,
+                            "role": "PRESENT"
+                        }
+                    )
 
         return {
             "message": "Progress saved successfully", 

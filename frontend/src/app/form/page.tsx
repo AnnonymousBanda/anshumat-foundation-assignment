@@ -165,6 +165,34 @@ export default function ApplicationFormPage() {
     const debouncedCounter = useRef(0)
     const debouncedFormData = useDebounce(formData, 500)
 
+    const hydrateFormData = (payload: unknown) => {
+        const raw = (payload ?? {}) as {
+            form_data?: Partial<FormDataState>
+            data?: Partial<FormDataState>
+        } & Partial<FormDataState>
+
+        const source = raw.form_data ?? raw.data ?? raw
+
+        setFormData((prev) => ({
+            personal: {
+                ...prev.personal,
+                ...(source.personal ?? {}),
+            },
+            family: {
+                ...prev.family,
+                ...(source.family ?? {}),
+            },
+            address: {
+                ...prev.address,
+                ...(source.address ?? {}),
+            },
+            documents: {
+                ...prev.documents,
+                ...(source.documents ?? {}),
+            },
+        }))
+    }
+
     useEffect(() => {
         const validateQueryParams = async () => {
             const applicationIdFromQuery = searchParams.get('applicationId')
@@ -190,7 +218,7 @@ export default function ApplicationFormPage() {
                 return
             }
 
-            setFormData(detailsRes.data)
+            hydrateFormData(detailsRes.data)
 
             const stepFromQuery = searchParams.get('step')
             const parsed = stepFromQuery ? parseInt(stepFromQuery) : NaN
@@ -213,10 +241,13 @@ export default function ApplicationFormPage() {
         if (!applicationId) return
 
         try {
-            await axios.patch(`/api/form/save/${applicationId}`, {
-                current_step: currentStep,
-                form_data: debouncedFormData,
-            })
+            await axios.patch(
+                `/api/form/save/${applicationId}`,
+                {
+                    current_step: currentStep,
+                    form_data: debouncedFormData,
+                },
+            )
 
             setSavedAt(
                 new Date().toLocaleTimeString([], {
