@@ -110,21 +110,12 @@ export default function ApplicationFormPage() {
     const searchParams = useSearchParams()
     const [currentStep, setCurrentStep] = useState(() => {
         const stepFromQuery = searchParams.get('step')
-        if (!stepFromQuery) {
-            router.replace('?step=1')
-            return 1
-        }
+        if (!stepFromQuery) return 1
 
         const parsed = parseInt(stepFromQuery)
-        if (Number.isNaN(parsed) || parsed < 1) {
-            router.replace('?step=1')
-            return 1
-        }
+        if (Number.isNaN(parsed) || parsed < 1) return 1
 
-        if (parsed > steps.length) {
-            router.replace(`?step=${steps.length}`)
-            return steps.length
-        }
+        if (parsed > steps.length) return steps.length
 
         return parsed
     })
@@ -166,6 +157,22 @@ export default function ApplicationFormPage() {
 
     const debouncedCounter = useRef(0)
     const debouncedFormData = useDebounce(formData, 500)
+
+    useEffect(() => {
+        const stepFromQuery = searchParams.get('step')
+        const parsed = stepFromQuery ? parseInt(stepFromQuery) : NaN
+        const normalized =
+            Number.isNaN(parsed) || parsed < 1
+                ? 1
+                : parsed > steps.length
+                  ? steps.length
+                  : parsed
+
+        if (stepFromQuery !== String(normalized)) {
+            router.replace(`/form?step=${normalized}`)
+        }
+    }, [searchParams, router])
+
     useEffect(() => {
         if (debouncedFormData && debouncedCounter.current > 0) updateSavedAt()
         debouncedCounter.current += 1
@@ -405,7 +412,7 @@ export default function ApplicationFormPage() {
         if (firstError.startsWith('documents.')) targetStep = 4
 
         setCurrentStep(targetStep)
-        router.replace(`?step=${targetStep}`)
+        router.replace(`/form?step=${targetStep}`)
 
         return false
     }
@@ -424,7 +431,7 @@ export default function ApplicationFormPage() {
 
         if (currentStep < steps.length) {
             setCurrentStep((prev) => prev + 1)
-            router.replace('?step=' + (currentStep + 1))
+            router.replace('/form?step=' + (currentStep + 1))
             return
         }
     }
@@ -432,7 +439,7 @@ export default function ApplicationFormPage() {
     const goBack = () => {
         if (currentStep > 1) {
             setCurrentStep((prev) => prev - 1)
-            router.replace('?step=' + (currentStep - 1))
+            router.replace('/form?step=' + (currentStep - 1))
         }
     }
 
@@ -440,7 +447,7 @@ export default function ApplicationFormPage() {
         if (targetStep < 1 || targetStep >= currentStep) return
 
         setCurrentStep(targetStep)
-        router.replace(`?step=${targetStep}`)
+        router.replace(`/form?step=${targetStep}`)
     }
 
     const renderStepContent = () => {
@@ -898,7 +905,7 @@ export default function ApplicationFormPage() {
                     {label}
                 </span>
                 {isFile && value ? (
-                    <div className="flex items-center justify-between p-3 border border-border rounded-lg bg-muted/30 group transition-colors hover:bg-muted/50">
+                    <div className="flex items-center justify-between p-3 border border-border rounded-lg bg-background/60 group transition-colors hover:bg-background/80">
                         <div className="flex items-center space-x-3 overflow-hidden">
                             <div className="p-2 bg-primary/10 text-primary rounded-md">
                                 <File className="w-4 h-4" />

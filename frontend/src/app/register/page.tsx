@@ -54,7 +54,11 @@ export default function RegisterPage() {
                 { phone_number: phoneNumber },
             )
             console.log(res)
-            if (res.status === 200) notify.success(res.data.message)
+            if (res.status === 200) {
+                notify.success(
+                    'A one-time verification code has been sent to your mobile number.',
+                )
+            }
             else throw new Error(res.data.detail)
 
             const { hash, expires_at } = res.data
@@ -100,7 +104,9 @@ export default function RegisterPage() {
             sessionStorage.removeItem('otp_expires_at')
             sessionStorage.removeItem('otp_phone')
 
-            notify.success(res.data.message)
+            notify.success(
+                'Verification successful. Redirecting you to your dashboard.',
+            )
             router.push('/dashboard')
         } catch (error) {
             console.log(error)
@@ -203,7 +209,9 @@ export default function RegisterPage() {
             const formData = new FormData()
             formData.append('token', res.data.token)
             await signIn(formData)
-            notify.success('Registration successful. Signing you up...')
+            notify.success(
+                'Registration completed successfully. Redirecting you to your dashboard.',
+            )
             router.push('/dashboard')
         } catch (error) {
             const backendErrorMessage =

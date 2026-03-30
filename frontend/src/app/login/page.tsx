@@ -53,7 +53,11 @@ export default function LoginPage() {
                 { phone_number: phoneNumber },
             )
 
-            if (res.status === 200) notify.success(res.data.message)
+            if (res.status === 200) {
+                notify.success(
+                    'A one-time verification code has been sent to your mobile number.',
+                )
+            }
             else throw new Error(res.data.detail)
 
             const { hash, expires_at } = res.data
@@ -94,7 +98,9 @@ export default function LoginPage() {
             const formData = new FormData()
             formData.append('token', res.data.token)
             await signIn(formData)
-            notify.success('Login successful. Signing you up...')
+            notify.success(
+                'Sign-in successful. Redirecting you to your dashboard.',
+            )
             router.push('/dashboard')
         } catch (error) {
             const backendErrorMessage =
@@ -137,7 +143,9 @@ export default function LoginPage() {
             sessionStorage.removeItem('otp_expires_at')
             sessionStorage.removeItem('otp_phone')
 
-            notify.success(res.data.message)
+            notify.success(
+                'Verification successful. Redirecting you to your dashboard.',
+            )
             router.push('/dashboard')
         } catch (err) {
             const backendErrorMessage =

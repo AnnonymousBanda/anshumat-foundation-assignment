@@ -23,6 +23,7 @@ export async function middleware(request: NextRequest) {
             )
 
             isValid = res.status === 200
+            console.log(`Token: ${token} | Valid: ${isValid}`)
         } catch {
             isValid = false
         }

@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from db.prisma_client import db
-from router.user_router import auth_router as user_router
+from router.imports import auth_router, form_router
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -26,8 +26,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(user_router)
+app.include_router(auth_router)
+app.include_router(form_router)
 
 @app.get("/")
 async def root():
     return {"message": "Server is running"}
+
