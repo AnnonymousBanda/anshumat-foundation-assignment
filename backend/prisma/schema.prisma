@@ -87,6 +87,8 @@ model application_details {
   spouse_name     String?  @db.VarChar(255)
   email           String?   @db.VarChar(255)
   phone_number    String?   @db.VarChar(20)
+  aadhaar_number  String?  @db.VarChar(20)
+  pan_number      String?  @db.VarChar(20)
 
   application applications @relation(fields: [application_id], references: [id], onDelete: Cascade)
 }
@@ -99,7 +101,7 @@ model addresses {
   city           String   @db.VarChar(255)
   state          String   @db.VarChar(255)
   pincode        String   @db.VarChar(20)
-  country        String   @db.VarChar(100)
+  country        String   @db.VarChar(100) @default("India")
 
   user                  users                    @relation(fields: [user_id], references: [id])
   application_addresses application_addresses[]

@@ -87,9 +87,10 @@ async def save_progress(
             raise HTTPException(status_code=400, detail="Cannot edit a submitted application")
 
         fd = payload.form_data
-        personal = fd.get("personal")
-        family = fd.get("family")
+        personal = fd.get("personal") or {}
+        family = fd.get("family") or {}
         addr = fd.get("address")
+        docs = fd.get("documents")
 
         async with db.tx() as transaction:
             updated_app = await transaction.applications.update(
@@ -100,65 +101,69 @@ async def save_progress(
                 }
             )
 
-            if personal is not None or family is not None:
-                p = personal or {}
-                f = family or {}
+            dob_val = None
+            if personal.get("dob"):
+                try:
+                    dob_val = datetime.fromisoformat(personal.get("dob").replace("Z", "+00:00"))
+                except ValueError:
+                    pass
 
-                dob_val = None
-                if p.get("dob"):
-                    try:
-                        dob_val = datetime.fromisoformat(p.get("dob").replace("Z", "+00:00"))
-                    except ValueError:
-                        pass
+            gender_val = None
+            if personal.get("gender"):
+                g = personal.get("gender").upper()
+                if g in ["MALE", "FEMALE"]:
+                    gender_val = g
+                elif g == "RATHER NOT SAY":
+                    gender_val = "RATHER_NOT_SAY"
 
-                gender_val = None
-                if p.get("gender"):
-                    g = p.get("gender").upper()
-                    if g in ["MALE", "FEMALE"]:
-                        gender_val = g
-                    elif g == "RATHER NOT SAY":
-                        gender_val = "RATHER_NOT_SAY"
+            existing_details = await transaction.application_details.find_unique(
+                where={"application_id": application_id}
+            )
 
-                existing_details = await transaction.application_details.find_unique(
-                    where={"application_id": application_id}
-                )
+            details_update_data = {}
+            if personal:
+                if "firstName" in personal: details_update_data["fName"] = personal["firstName"]
+                if "lastName" in personal: details_update_data["lName"] = personal["lastName"]
+                if "gender" in personal: details_update_data["gender"] = gender_val
+                if "dob" in personal: details_update_data["dob"] = dob_val
+                if "placeOfBirth" in personal: details_update_data["place_of_birth"] = personal["placeOfBirth"]
+                if "birthState" in personal: details_update_data["state_of_birth"] = personal["birthState"]
+                if "email" in personal: details_update_data["email"] = personal["email"]
+                if "phone" in personal: details_update_data["phone_number"] = personal["phone"]
+            
+            if family:
+                if "fatherName" in family: details_update_data["father_name"] = family["fatherName"]
+                if "motherName" in family: details_update_data["mother_name"] = family["motherName"]
+                if "spouseName" in family: details_update_data["spouse_name"] = family["spouseName"]
 
-                update_data = {}
-                if p:
-                    if "firstName" in p: update_data["fName"] = p["firstName"]
-                    if "lastName" in p: update_data["lName"] = p["lastName"]
-                    if "gender" in p: update_data["gender"] = gender_val
-                    if "dob" in p: update_data["dob"] = dob_val
-                    if "placeOfBirth" in p: update_data["place_of_birth"] = p["placeOfBirth"]
-                    if "birthState" in p: update_data["state_of_birth"] = p["birthState"]
-                    if "email" in p: update_data["email"] = p["email"]
-                    if "phone" in p: update_data["phone_number"] = p["phone"]
-                if f:
-                    if "fatherName" in f: update_data["father_name"] = f["fatherName"]
-                    if "motherName" in f: update_data["mother_name"] = f["motherName"]
-                    if "spouseName" in f: update_data["spouse_name"] = f["spouseName"]
+            if docs:
+                if "aadhaarNumber" in docs: details_update_data["aadhaar_number"] = docs["aadhaarNumber"]
+                if "panNumber" in docs: details_update_data["pan_number"] = docs["panNumber"]
 
+            if details_update_data or existing_details is None:
                 if existing_details:
-                    if update_data:
+                    if details_update_data:
                         await transaction.application_details.update(
                             where={"application_id": application_id},
-                            data=update_data
+                            data=details_update_data
                         )
                 else:
                     await transaction.application_details.create(
                         data={
                             "application_id": application_id,
-                            "fName": p.get("firstName"),
-                            "lName": p.get("lastName"),
+                            "fName": personal.get("firstName"),
+                            "lName": personal.get("lastName"),
                             "gender": gender_val,
                             "dob": dob_val,
-                            "place_of_birth": p.get("placeOfBirth"),
-                            "state_of_birth": p.get("birthState"),
-                            "email": p.get("email"),
-                            "phone_number": p.get("phone"),
-                            "father_name": f.get("fatherName"),
-                            "mother_name": f.get("motherName"),
-                            "spouse_name": f.get("spouseName")
+                            "place_of_birth": personal.get("placeOfBirth"),
+                            "state_of_birth": personal.get("birthState"),
+                            "email": personal.get("email"),
+                            "phone_number": personal.get("phone"),
+                            "father_name": family.get("fatherName"),
+                            "mother_name": family.get("motherName"),
+                            "spouse_name": family.get("spouseName"),
+                            "aadhaar_number": (docs or {}).get("aadhaarNumber"),
+                            "pan_number": (docs or {}).get("panNumber")
                         }
                     )
 
@@ -203,6 +208,37 @@ async def save_progress(
                             "role": "PRESENT"
                         }
                     )
+
+            if docs is not None:
+                id_proof = docs.get("idProofName")
+                
+                if id_proof is not None:
+                    app_doc = await transaction.application_documents.find_first(
+                        where={
+                            "application_id": application_id,
+                            "role": "PRESENT_ADDRESS_PROOF"
+                        }
+                    )
+                    
+                    if app_doc:
+                        await transaction.documents.update(
+                            where={"id": app_doc.document_id},
+                            data={"file_url": id_proof}
+                        )
+                    else:
+                        new_doc = await transaction.documents.create(
+                            data={
+                                "user_id": user_id,
+                                "file_url": id_proof
+                            }
+                        )
+                        await transaction.application_documents.create(
+                            data={
+                                "application_id": application_id,
+                                "document_id": new_doc.id,
+                                "role": "PRESENT_ADDRESS_PROOF"
+                            }
+                        )
 
         return {
             "message": "Progress saved successfully", 
@@ -328,14 +364,16 @@ async def get_application_details(
                 "country": address_details.address.country or "",
             }
 
+        form_data["documents"] = {
+            "aadhaarNumber": personal_details.aadhaar_number if personal_details and personal_details.aadhaar_number else "",
+            "panNumber": personal_details.pan_number if personal_details and personal_details.pan_number else "",
+            "addressProofType": "",
+            "passportPhotoName": "",
+            "idProofName": "",
+        }
+
         if document_details and document_details.document:
-            form_data["documents"] = {
-                "aadhaarNumber": "",
-                "panNumber": "",
-                "addressProofType": "",
-                "passportPhotoName": "",
-                "idProofName": document_details.document.file_url or "",
-            }
+            form_data["documents"]["idProofName"] = document_details.document.file_url or ""
 
         return {
             "message": "Application details retrieved successfully",

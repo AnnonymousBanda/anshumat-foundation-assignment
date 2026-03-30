@@ -172,11 +172,17 @@ export default function ApplicationFormPage() {
         } & Partial<FormDataState>
 
         const source = raw.form_data ?? raw.data ?? raw
+        const incomingDob = source.personal?.dob ?? ''
+        const normalizedDob =
+            typeof incomingDob === 'string' && incomingDob.includes('T')
+                ? incomingDob.split('T')[0]
+                : incomingDob
 
         setFormData((prev) => ({
             personal: {
                 ...prev.personal,
                 ...(source.personal ?? {}),
+                dob: normalizedDob,
             },
             family: {
                 ...prev.family,
@@ -241,13 +247,22 @@ export default function ApplicationFormPage() {
         if (!applicationId) return
 
         try {
-            await axios.patch(
-                `/api/form/save/${applicationId}`,
-                {
-                    current_step: currentStep,
-                    form_data: debouncedFormData,
+            const rawDob = debouncedFormData.personal?.dob ?? ''
+            const dobForSave =
+                rawDob && !rawDob.includes('T')
+                    ? `${rawDob}T00:00:00.000Z`
+                    : rawDob
+
+            await axios.patch(`/api/form/save/${applicationId}`, {
+                current_step: currentStep,
+                form_data: {
+                    ...debouncedFormData,
+                    personal: {
+                        ...debouncedFormData.personal,
+                        dob: dobForSave,
+                    },
                 },
-            )
+            })
 
             setSavedAt(
                 new Date().toLocaleTimeString([], {
