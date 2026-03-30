@@ -3,8 +3,9 @@ import { NextResponse } from 'next/server'
 
 export async function PATCH(
     request: Request,
-    { params }: { params: { application_id: string } },
+    { params }: { params: Promise<{ application_id: string }> },
 ) {
+    const { application_id } = await params
     const cookieStore = await cookies()
     const tokenValue = cookieStore.get('auth-token')?.value
 
@@ -21,7 +22,7 @@ export async function PATCH(
         const body = await request.json()
 
         const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/form/save/${params.application_id}`,
+            `${process.env.NEXT_PUBLIC_API_URL}/form/save/${application_id}`,
             {
                 method: 'PATCH',
                 headers: {

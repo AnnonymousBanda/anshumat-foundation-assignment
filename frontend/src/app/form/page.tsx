@@ -1,6 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+    Suspense,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react'
 import { useRouter } from 'next/navigation'
 import PageShell from '@/components/layout/PageShell'
 import SurfaceCard from '@/components/common/SurfaceCard'
@@ -106,7 +113,7 @@ type FormDataState = {
     }
 }
 
-export default function ApplicationFormPage() {
+function ApplicationFormPageContent() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const [currentStep, setCurrentStep] = useState(() => {
@@ -243,13 +250,17 @@ export default function ApplicationFormPage() {
                       ? steps.length
                       : parsed
 
+            if (currentStep !== normalized) {
+                setCurrentStep(normalized)
+            }
+
             if (stepFromQuery !== String(normalized)) {
                 router.replace(buildFormUrl(normalized, applicationIdFromQuery))
             }
         }
 
         validateQueryParams()
-    }, [searchParams, router, applicationId])
+    }, [searchParams, router, applicationId, currentStep])
 
     const updateSavedAt = useCallback(
         async (dataToSave: FormDataState) => {
@@ -551,16 +562,18 @@ export default function ApplicationFormPage() {
         if (!saved) return
 
         if (currentStep < steps.length) {
-            setCurrentStep((prev) => prev + 1)
-            router.replace(buildFormUrl(currentStep + 1, applicationId))
+            const nextStep = currentStep + 1
+            setCurrentStep(nextStep)
+            router.replace(buildFormUrl(nextStep, applicationId))
             return
         }
     }
 
     const goBack = () => {
         if (currentStep > 1) {
-            setCurrentStep((prev) => prev - 1)
-            router.replace(buildFormUrl(currentStep - 1, applicationId))
+            const previousStep = currentStep - 1
+            setCurrentStep(previousStep)
+            router.replace(buildFormUrl(previousStep, applicationId))
         }
     }
 
@@ -1218,5 +1231,19 @@ export default function ApplicationFormPage() {
                 </div>
             </SurfaceCard>
         </PageShell>
+    )
+}
+
+export default function ApplicationFormPage() {
+    return (
+        <Suspense
+            fallback={
+                <div className="p-6 text-sm text-muted-foreground">
+                    Loading form...
+                </div>
+            }
+        >
+            <ApplicationFormPageContent />
+        </Suspense>
     )
 }

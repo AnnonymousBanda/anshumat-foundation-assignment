@@ -25,21 +25,6 @@ async def start_new_application(current_user: dict = Depends(verify_user)):
     try:
         user_id = current_user["user"]["id"]
 
-        existing_draft = await db.applications.find_first(
-            where={
-                "user_id": user_id,
-                "status": "DRAFT"
-            }
-        )
-
-        if existing_draft:
-            return {
-                "message": "Resuming existing draft",
-                "application_id": existing_draft.id,
-                "current_step": existing_draft.current_step,
-                "form_data": {}
-            }
-
         new_app = await db.applications.create(
             data={
                 "user_id": user_id,
@@ -426,45 +411,45 @@ async def submit_form(
         if app_record.status != "DRAFT":
             raise HTTPException(status_code=400, detail="Application is already submitted")
 
-        form_data = app_record.form_data if app_record.form_data else {}
-
-        required_sections = ["personal", "family", "address", "documents"]
-        missing_sections = [sec for sec in required_sections if sec not in form_data or not form_data[sec]]
-        
-        if missing_sections:
-            missing_str = ", ".join(missing_sections)
-            raise HTTPException(status_code=400, detail=f"Incomplete application. Missing sections: {missing_str}")
-
         async with db.tx() as transaction:
-            addr = form_data.get("address", {})
-            await transaction.addresses.create(
-                data={
-                    "user_id": user_id,
-                    "address_line_1": addr.get("addressLine1", ""),
-                    "address_line_2": addr.get("addressLine2", ""),
-                    "city": addr.get("city", ""),
-                    "state": addr.get("state", ""),
-                    "pincode": addr.get("pincode", ""),
-                    "country": addr.get("country", "")
+            details = await transaction.application_details.find_unique(
+                where={"application_id": application_id}
+            )
+
+            present_address = await transaction.application_addresses.find_first(
+                where={
+                    "application_id": application_id,
+                    "role": "PRESENT",
                 }
             )
 
-            docs = form_data.get("documents", {})
-            await transaction.documents.create(
-                data={
-                    "user_id": user_id,
-                    "aadhaar_number": docs.get("aadhaarNumber", ""),
-                    "pan_number": docs.get("panNumber", ""),
-                    "address_proof_type": docs.get("addressProofType", ""),
-                    "passport_photo_url": docs.get("passportPhotoName", ""),
-                    "id_proof_url": docs.get("idProofName", "")
+            address_proof_doc = await transaction.application_documents.find_first(
+                where={
+                    "application_id": application_id,
+                    "role": "PRESENT_ADDRESS_PROOF",
                 }
             )
+
+            missing_sections = []
+            if not details:
+                missing_sections.append("personal/family")
+            if not present_address:
+                missing_sections.append("address")
+            if not address_proof_doc:
+                missing_sections.append("documents")
+
+            if missing_sections:
+                missing_str = ", ".join(missing_sections)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Incomplete application. Missing sections: {missing_str}",
+                )
 
             updated_app = await transaction.applications.update(
                 where={"id": application_id},
                 data={
-                    "status": "SUBMITTED"
+                    "status": "SUBMITTED",
+                    "submitted_at": datetime.now(timezone.utc),
                 }
             )
 

@@ -72,12 +72,6 @@ const Navbar = ({ state = 'public', formStep, savedAt }: NavbarProps) => {
                             >
                                 Dashboard
                             </Link>
-                            <Link
-                                href="/dashboard"
-                                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                                My Applications
-                            </Link>
                         </>
                     )}
                     {state === 'form' && formStep && (
