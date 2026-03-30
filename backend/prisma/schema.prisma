@@ -76,17 +76,17 @@ model applications {
 
 model application_details {
   application_id  String   @id @db.VarChar(36)
-  fName           String   @db.VarChar(255)
-  lName           String   @db.VarChar(255)
-  gender          gender
-  dob             DateTime @db.Date
-  place_of_birth  String   @db.VarChar(255)
-  state_of_birth  String   @db.VarChar(255)
-  father_name     String   @db.VarChar(255)
-  mother_name     String   @db.VarChar(255)
+  fName           String?   @db.VarChar(255)
+  lName           String?   @db.VarChar(255)
+  gender          gender?
+  dob             DateTime? @db.Date
+  place_of_birth  String?   @db.VarChar(255)
+  state_of_birth  String?   @db.VarChar(255)
+  father_name     String?   @db.VarChar(255)
+  mother_name     String?   @db.VarChar(255)
   spouse_name     String?  @db.VarChar(255)
-  email           String   @db.VarChar(255)
-  phone_number    String   @db.VarChar(20)
+  email           String?   @db.VarChar(255)
+  phone_number    String?   @db.VarChar(20)
 
   application applications @relation(fields: [application_id], references: [id], onDelete: Cascade)
 }

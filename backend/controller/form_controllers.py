@@ -63,7 +63,7 @@ async def start_new_application(current_user: dict = Depends(verify_user)):
 
 
 async def save_progress(
-    application_id: str, 
+    application_id: str,
     payload: PatchProgressPayload, 
     current_user: dict = Depends(verify_user)
 ):
@@ -159,7 +159,7 @@ async def get_application_details(
         if not app_record:
             raise HTTPException(status_code=404, detail="Application not found or unauthorized")
 
-        default_form_data = {
+        form_data = {
             "personal": {
                 "firstName": "", "lastName": "", "dob": "", "gender": "",
                 "birthState": "", "placeOfBirth": "", "email": "", "phone": ""
@@ -177,7 +177,55 @@ async def get_application_details(
             }
         }
 
-        final_form_data = default_form_data
+        personal_details = await db.application_details.find_unique(
+            where={"application_id": application_id}
+        )
+
+        address_details = await db.application_addresses.find_first(
+            where={"application_id": application_id, "role": "PRESENT"},
+            include={"address": True},
+        )
+
+        document_details = await db.application_documents.find_first(
+            where={"application_id": application_id, "role": "PRESENT_ADDRESS_PROOF"},
+            include={"document": True},
+        )
+
+        if personal_details:
+            form_data["personal"] = {
+                "firstName": personal_details.fName or "",
+                "lastName": personal_details.lName or "",
+                "dob": personal_details.dob.isoformat() if personal_details.dob else "",
+                "gender": personal_details.gender or "",
+                "birthState": personal_details.state_of_birth or "",
+                "placeOfBirth": personal_details.place_of_birth or "",
+                "email": personal_details.email or "",
+                "phone": personal_details.phone_number or "",
+            }
+            form_data["family"] = {
+                "motherName": personal_details.mother_name or "",
+                "fatherName": personal_details.father_name or "",
+                "spouseName": personal_details.spouse_name or "",
+            }
+
+        if address_details and address_details.address:
+            form_data["address"] = {
+                "addressLine1": address_details.address.address_line_1 or "",
+                "addressLine2": address_details.address.address_line_2 or "",
+                "city": address_details.address.city or "",
+                "state": address_details.address.state or "",
+                "pincode": address_details.address.pincode or "",
+                "country": address_details.address.country or "",
+            }
+
+        if document_details and document_details.document:
+            form_data["documents"] = {
+                "aadhaarNumber": "",
+                "panNumber": "",
+                "addressProofType": "",
+                "passportPhotoName": "",
+                "idProofName": document_details.document.file_url or "",
+            }
 
         return {
             "message": "Application details retrieved successfully",
@@ -185,7 +233,7 @@ async def get_application_details(
             "arn": app_record.arn,
             "status": app_record.status,
             "current_step": app_record.current_step,
-            "form_data": final_form_data
+            "form_data": form_data
         }
 
     except HTTPException:

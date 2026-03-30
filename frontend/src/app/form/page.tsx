@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import PageShell from '@/components/layout/PageShell'
 import SurfaceCard from '@/components/common/SurfaceCard'
@@ -11,6 +11,7 @@ import { Eye, File, FileText, Info, MapPin, User, Users } from 'lucide-react'
 
 import useDebounce from '@/hooks/useDebounce'
 import { useSearchParams } from 'next/navigation'
+import axios from 'axios'
 
 const steps = [
     'Personal Info',
@@ -119,7 +120,13 @@ export default function ApplicationFormPage() {
 
         return parsed
     })
+    const [applicationId, setApplicationId] = useState(() => {
+        const idFromQuery = searchParams.get('applicationId')
+        return idFromQuery || ''
+    })
 
+    const buildFormUrl = (step: number, id: string) =>
+        `/form?applicationId=${id}&step=${step}`
     const [savedAt, setSavedAt] = useState('')
     const [missingRequired, setMissingRequired] = useState<string[]>([])
     const [formData, setFormData] = useState<FormDataState>({
@@ -159,35 +166,82 @@ export default function ApplicationFormPage() {
     const debouncedFormData = useDebounce(formData, 500)
 
     useEffect(() => {
-        const stepFromQuery = searchParams.get('step')
-        const parsed = stepFromQuery ? parseInt(stepFromQuery) : NaN
-        const normalized =
-            Number.isNaN(parsed) || parsed < 1
-                ? 1
-                : parsed > steps.length
-                  ? steps.length
-                  : parsed
+        const validateQueryParams = async () => {
+            const applicationIdFromQuery = searchParams.get('applicationId')
+            if (!applicationIdFromQuery) {
+                notify.error(
+                    'No application ID found. Redirecting to onboarding.',
+                )
+                router.push('/onboarding')
+                return
+            }
 
-        if (stepFromQuery !== String(normalized)) {
-            router.replace(`/form?step=${normalized}`)
+            setApplicationId(applicationIdFromQuery)
+
+            const detailsRes = await axios.get(
+                `/api/form/details/${applicationIdFromQuery}`,
+            )
+
+            if (detailsRes.status !== 200) {
+                notify.error(
+                    'Invalid application ID. Redirecting to onboarding.',
+                )
+                router.push('/onboarding')
+                return
+            }
+
+            setFormData(detailsRes.data)
+
+            const stepFromQuery = searchParams.get('step')
+            const parsed = stepFromQuery ? parseInt(stepFromQuery) : NaN
+            const normalized =
+                Number.isNaN(parsed) || parsed < 1
+                    ? 1
+                    : parsed > steps.length
+                      ? steps.length
+                      : parsed
+
+            if (stepFromQuery !== String(normalized)) {
+                router.replace(buildFormUrl(normalized, applicationIdFromQuery))
+            }
         }
+
+        validateQueryParams()
     }, [searchParams, router])
+
+    const updateSavedAt = useCallback(async () => {
+        if (!applicationId) return
+
+        try {
+            await axios.patch(`/api/form/save/${applicationId}`, {
+                current_step: currentStep,
+                form_data: debouncedFormData,
+            })
+
+            setSavedAt(
+                new Date().toLocaleTimeString([], {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                }),
+            )
+        } catch (error) {
+            const typedError = error as {
+                response?: { data?: { detail?: string } }
+                message?: string
+            }
+            const errorMsg =
+                typedError.response?.data?.detail ||
+                typedError.message ||
+                'Failed to save form progress. Please try again.'
+
+            notify.error(errorMsg)
+        }
+    }, [applicationId, currentStep, debouncedFormData])
 
     useEffect(() => {
         if (debouncedFormData && debouncedCounter.current > 0) updateSavedAt()
         debouncedCounter.current += 1
-    }, [debouncedFormData])
-
-    const updateSavedAt = () => {
-        setSavedAt(
-            new Date().toLocaleTimeString([], {
-                hour: 'numeric',
-                minute: '2-digit',
-            }),
-        )
-
-        // patch to backend can be done here to save progress
-    }
+    }, [debouncedFormData, updateSavedAt])
 
     const updatePersonalField = (
         key: keyof FormDataState['personal'],
@@ -412,7 +466,7 @@ export default function ApplicationFormPage() {
         if (firstError.startsWith('documents.')) targetStep = 4
 
         setCurrentStep(targetStep)
-        router.replace(`/form?step=${targetStep}`)
+        router.replace(buildFormUrl(targetStep, applicationId))
 
         return false
     }
@@ -431,7 +485,7 @@ export default function ApplicationFormPage() {
 
         if (currentStep < steps.length) {
             setCurrentStep((prev) => prev + 1)
-            router.replace('/form?step=' + (currentStep + 1))
+            router.replace(buildFormUrl(currentStep + 1, applicationId))
             return
         }
     }
@@ -439,7 +493,7 @@ export default function ApplicationFormPage() {
     const goBack = () => {
         if (currentStep > 1) {
             setCurrentStep((prev) => prev - 1)
-            router.replace('/form?step=' + (currentStep - 1))
+            router.replace(buildFormUrl(currentStep - 1, applicationId))
         }
     }
 
@@ -447,7 +501,7 @@ export default function ApplicationFormPage() {
         if (targetStep < 1 || targetStep >= currentStep) return
 
         setCurrentStep(targetStep)
-        router.replace(`/form?step=${targetStep}`)
+        router.replace(buildFormUrl(targetStep, applicationId))
     }
 
     const renderStepContent = () => {
