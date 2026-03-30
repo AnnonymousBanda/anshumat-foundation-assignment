@@ -164,6 +164,7 @@ export default function ApplicationFormPage() {
 
     const debouncedCounter = useRef(0)
     const debouncedFormData = useDebounce(formData, 500)
+    const highestSavedStepRef = useRef(currentStep)
 
     const hydrateFormData = (payload: unknown) => {
         const raw = (payload ?? {}) as {
@@ -226,6 +227,14 @@ export default function ApplicationFormPage() {
 
             hydrateFormData(detailsRes.data)
 
+            const persistedStep = Number(detailsRes.data?.current_step)
+            if (!Number.isNaN(persistedStep)) {
+                highestSavedStepRef.current = Math.max(
+                    highestSavedStepRef.current,
+                    persistedStep,
+                )
+            }
+
             const stepFromQuery = searchParams.get('step')
             const parsed = stepFromQuery ? parseInt(stepFromQuery) : NaN
             const normalized =
@@ -252,9 +261,10 @@ export default function ApplicationFormPage() {
                 rawDob && !rawDob.includes('T')
                     ? `${rawDob}T00:00:00.000Z`
                     : rawDob
+            const stepToSave = Math.max(highestSavedStepRef.current, currentStep)
 
             await axios.patch(`/api/form/save/${applicationId}`, {
-                current_step: currentStep,
+                current_step: stepToSave,
                 form_data: {
                     ...debouncedFormData,
                     personal: {
@@ -263,6 +273,8 @@ export default function ApplicationFormPage() {
                     },
                 },
             })
+
+            highestSavedStepRef.current = stepToSave
 
             setSavedAt(
                 new Date().toLocaleTimeString([], {

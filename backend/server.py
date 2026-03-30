@@ -33,3 +33,17 @@ app.include_router(form_router)
 async def root():
     return {"message": "Server is running"}
 
+
+def get_port() -> int:
+    raw_port = os.getenv("PORT", "8000")
+    try:
+        return int(raw_port)
+    except ValueError:
+        return 8000
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("server:app", host="0.0.0.0", port=get_port(), reload=True)
+
